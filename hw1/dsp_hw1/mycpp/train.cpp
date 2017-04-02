@@ -7,7 +7,7 @@
 
 using namespace std;
 
-int main()
+int main(int argc, char **argv)
 {
 /*
 	HMM hmms[5];
@@ -15,36 +15,49 @@ int main()
 	dump_models( hmms, 5);
 */
 	// training option
-	int epochs = 1;
+	int iters = atoi(argv[1]);
 
-	//  training parameters
-	double alpha[50][6]; // T = 50, N = 6
-	double beta [50][6];
-	double gamma[50][6];
-	double epson[50][6][6]; // T = 50, from i = 6, to j = 6
 	HMM model;
-	loadHMM( &model, "model_init.txt" );
+	loadHMM(&model, argv[2]);
+	dumpHMM(stderr, &model);
 	int state = model.state_num;
 
-	// reading seq_model
-	fstream seq;
-	seq.open("../seq_model_01.txt");
-
 	// training stage
-	for (int e = 0; e < epochs; e++) {
+	for (int e = 0; e < iters; e++) {
+		// several sum to update a, b, pi
+		double sum_pi[6];
+		double sum_a_up[6][6];
+		double sum_a_down[6];
+		double sum_b_up[6][6];
+		double sum_b_down[6];
+		for (int i = 0; i < 6; i++) {
+			sum_pi[i] = sum_a_down[i] = sum_b_down[i] = 0.0;
+			for (int j = 0; j < 6; j++)
+				sum_a_up[i][j] = sum_b_up[i][j] = 0.0;
+		}
+
+		// reading seq_model
+		fstream seq;
+		seq.open(argv[3]);
+
 		for (int g = 0; g < 10000; g++) {
+			//  training parameters
+			double alpha[50][6]; // sample, T = 50, N = 6
+			double beta [50][6];
+			double gamma[50][6];
+			double epson[50][6][6]; // T = 50, from i = 6, to j = 6
+			int    obs  [50];
+
 			// preprocess sequence
 			string str;
 			seq >> str;
-			vector<int> obs;
-			obs.resize(50);
-			for (int j = 0; j < obs.size(); j++) 
-				obs[j] = int(str[j]) - 65;
+			for (int t = 0; t < 50; t++) 
+				obs[t] = int(str[t]) - 65;
 
 			// calculate alpha
 			for (int i = 0; i < state; i++)
 				alpha[0][i] = model.initial[i] * model.observation[obs[0]][i];
-			for (int t = 1; t < obs.size(); t++) {
+			for (int t = 1; t < 50; t++) {
 				for (int j = 0; j < state; j++) {
 					double sum = 0;
 					for (int i = 0; i < state; i++) 
@@ -66,7 +79,7 @@ int main()
 			}
 
 			// calculate gamma
-			for (int t = 0; t < obs.size(); t++) {
+			for (int t = 0; t < 50; t++) {
 				double sum = 0;
 				for (int i = 0; i < state; i++) {
 					gamma[t][i] = alpha[t][i] * beta[t][i];
@@ -77,7 +90,7 @@ int main()
 			}
 
 			// calculate epson
-			for (int t = 0; t < obs.size()-1; t++) {
+			for (int t = 0; t < 49; t++) {
 				double sum = 0;
 				for (int i = 0; i < state; i++) {
 					for (int j = 0; j < state; j++) {
@@ -91,28 +104,34 @@ int main()
 						epson[t][i][j] /= sum;
 			}
 
-			// update pi (initial)
-			for (int i = 0; i < state; i++)
-				model.initial[i] = gamma[0][i];
-			// update a  (transition)
-			for (int i = 0; i < state; i++) {
-				for (int j = 0; j < state; j++) {
-
+			// update several sum
+			for (int i = 0; i < 6; i++) {
+				sum_pi[i] += gamma[0][i];
+				for (int t = 0; t < 49; t++) {
+					sum_a_down[i] += gamma[t][i];
+					sum_b_down[i] += gamma[t][i];
+					for (int j = 0; j < 6; j++)
+						sum_a_up[i][j] += epson[t][i][j];
+				}
+				sum_b_down[i] += gamma[49][i];
+				for (int t = 0; t < 50; t++) {
+					sum_b_up[obs[t]][i] += gamma[t][i];
 				}
 			}
-			/*
-			for (int i = 5; i >= 0; i--) {
-				for (int t = 0; t < 10; t++)
-					cout << gamma[t][i] << ' ';
-				cout << endl;
-			}
-			cout << endl;
-			*/
 		}
 
-		
+		// update a, b, pi
+		for (int i = 0; i < 6; i++) {
+			model.initial[i] = sum_pi[i] * 0.0001;
+			for (int j = 0; j < 6; j++) {
+				model.transition[i][j]  = sum_a_up[i][j] / sum_a_down[i];
+				model.observation[i][j] = sum_b_up[i][j] / sum_b_down[j];
+			}
+		}
+		dumpHMM(stderr, &model);
 	}
-
-
+	FILE *fs;
+	fs = fopen(argv[4], "w");
+	dumpHMM(fs, &model);
 	return 0;
 }
