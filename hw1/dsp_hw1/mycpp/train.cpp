@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <iomanip>
 #include "hmm.h"
 #include <math.h>
 
@@ -9,17 +10,11 @@ using namespace std;
 
 int main(int argc, char **argv)
 {
-/*
-	HMM hmms[5];
-	load_models( "modellist.txt", hmms, 5);
-	dump_models( hmms, 5);
-*/
 	// training option
 	int iters = atoi(argv[1]);
 
 	HMM model;
 	loadHMM(&model, argv[2]);
-	dumpHMM(stderr, &model);
 	int state = model.state_num;
 
 	// training stage
@@ -128,7 +123,7 @@ int main(int argc, char **argv)
 				model.observation[i][j] = sum_b_up[i][j] / sum_b_down[j];
 			}
 		}
-		dumpHMM(stderr, &model);
+		cerr << "\riteratons : " << setw(4) << e << " / " << iters;
 	}
 	FILE *fs;
 	fs = fopen(argv[4], "w");
